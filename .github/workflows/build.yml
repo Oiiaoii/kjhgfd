@@ -1,0 +1,127 @@
+name: Build APK
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Find the Android project folder
+        id: find
+        shell: bash
+        run: |
+          dir=""
+          while IFS= read -r f; do
+            d=$(dirname "$f")
+            if [ -f "$d/build.gradle.kts" ] && [ -f "$d/app/build.gradle.kts" ]; then
+              dir="$d"
+              break
+            fi
+          done < <(find . -name settings.gradle.kts -not -path './.git/*' | sort)
+          if [ -z "$dir" ]; then
+            echo "::error::No Android project found (a folder with settings.gradle.kts, build.gradle.kts and app/build.gradle.kts)."
+            echo "Repository files:"
+            find . -maxdepth 3 -not -path './.git/*' | sort | head -80
+            exit 1
+          fi
+          echo "Android project folder: $dir"
+          echo "dir=$dir" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: 8.9
+
+      - name: Auto-fix Scene.kt if it is the old version (smart-cast error)
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import glob
+          new = [
+            "        var found: Best? = null",
+            "        var s = from",
+            "        while (s <= to) {",
+            "            val b = at(s)",
+            "            val cur = found",
+            "            if (b != null && (cur == null || b.score > cur.score)) found = b",
+            "            s *= 1.14",
+            "        }",
+            "        val first = found ?: return null",
+            "        val fin = refine(first)",
+            "        if (fin.score >= accept) memo[slot] = fin.scale",
+            "        return fin",
+          ]
+          start = "        var top: Best? = null\n"
+          end = "        return top\n"
+          for f in glob.glob("**/Scene.kt", recursive=True):
+              t = open(f, encoding="utf-8").read()
+              i = t.find(start)
+              if i < 0:
+                  print("Scene.kt already fixed:", f)
+                  continue
+              j = t.find(end, i)
+              if j < 0:
+                  raise SystemExit("could not find the end of the block in " + f)
+              t = t[:i] + "\n".join(new) + "\n" + t[j + len(end):]
+              open(f, "w", encoding="utf-8").write(t)
+              print("Patched Scene.kt:", f)
+          PY
+
+      - name: Build debug APK
+        working-directory: ${{ steps.find.outputs.dir }}
+        shell: bash
+        run: |
+          set -o pipefail
+          gradle assembleDebug --no-daemon --console=plain 2>&1 | tee "$RUNNER_TEMP/build.log"
+
+      - name: Show the compile errors (only when the build fails)
+        if: failure()
+        shell: bash
+        run: |
+          {
+            echo "## Build failed - errors"
+            echo '```'
+            grep -E "^e: |error:|What went wrong|Execution failed" -A1 "$RUNNER_TEMP/build.log" | grep -v '^--$' | head -80 || true
+            echo '```'
+            echo "Send these lines (not the long stack trace)."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "---- first errors ----"
+          grep -E "^e: " "$RUNNER_TEMP/build.log" | head -40 || true
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: SolMacro-apk
+          path: ${{ steps.find.outputs.dir }}/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
+      - name: Upload build log (only when the build fails)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: ${{ runner.temp }}/build.log
+          if-no-files-found: ignore
+
+      - name: Upload build reports (only when the build fails)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-reports
+          path: |
+            ${{ steps.find.outputs.dir }}/app/build/reports
+            ${{ steps.find.outputs.dir }}/app/build/outputs/logs
+          if-no-files-found: ignore
