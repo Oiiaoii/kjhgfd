@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- OWNER (only you see the Blacklist screen). owner_username is a reserved name: it can only be used with the owner password.
+         owner_hash is the PBKDF2 hash of that password (see BLACKLIST_SETUP.md). Both empty = nobody is owner. -->
+    <string name="owner_username" translatable="false"></string>
+    <string name="owner_hash" translatable="false"></string>
+
+    <!-- Address of the blacklist file that every copy of the app downloads (a public GitHub Gist raw link, for example). -->
+    <string name="blacklist_url" translatable="false"></string>
+</resources>

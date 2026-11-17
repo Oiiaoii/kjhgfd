@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- LuminFish night-blue theme; bars are painted the same color as the app -->
+    <style name="AppTheme" parent="android:Theme.DeviceDefault.NoActionBar">
+        <item name="android:windowBackground">#FF03050E</item>
+        <item name="android:statusBarColor">#FF03050E</item>
+        <item name="android:navigationBarColor">#FF03050E</item>
+        <item name="android:colorPrimary">#FF03050E</item>
+        <item name="android:colorPrimaryDark">#FF03050E</item>
+        <item name="android:colorAccent">#FF8FB4FF</item>
+        <item name="android:textColorHint">#FF5E6AA0</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>
